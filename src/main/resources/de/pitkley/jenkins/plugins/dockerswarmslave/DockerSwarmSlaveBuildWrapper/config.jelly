@@ -1,0 +1,23 @@
+<?jelly escape-by-default="true"?>
+<j:jelly xmlns:j="jelly:core" xmlns:f="/lib/form" xmlns:c="/lib/credentials" xmlns:d="/lib/docker/commons">
+    <f:nested>
+        <f:entry field="dockerImage" title="Docker-slave image to use">
+            <f:textbox/>
+        </f:entry>
+        <f:advanced>
+            <f:entry field="swarmCredentials" title="Swarm credentials">
+                <c:select/>
+            </f:entry>
+            <f:property field="dockerHost"/>
+            <f:entry>
+                <d:selectDockerTool field="dockerInstallation"/>
+            </f:entry>
+            <f:entry field="dockerNetwork" title="Docker network">
+                <f:textbox default="bridge"/>
+            </f:entry>
+            <f:entry field="dockerRegistryCredentials" title="Docker registry credentials">
+                <c:select/>
+            </f:entry>
+        </f:advanced>
+    </f:nested>
+</j:jelly>
