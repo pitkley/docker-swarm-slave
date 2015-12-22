@@ -33,9 +33,6 @@ public class DockerSwarmSlaveBuildWrapper extends BuildWrapper {
     private final String dockerNetwork;
     private final String dockerRegistryCredentials;
 
-    private transient DockerSwarmSlave dockerSwarmSlave = null;
-    private transient Exception abortBuild = null;
-
     @DataBoundConstructor
     public DockerSwarmSlaveBuildWrapper(String dockerImage, String swarmCredentials, DockerServerEndpoint dockerHost, String dockerInstallation, String dockerNetwork, String dockerRegistryCredentials) {
         this.dockerImage = dockerImage;
@@ -48,17 +45,17 @@ public class DockerSwarmSlaveBuildWrapper extends BuildWrapper {
 
     @Override
     public Environment setUp(AbstractBuild build, Launcher launcher, BuildListener listener) throws IOException, InterruptedException {
-        if (this.abortBuild != null) {
-            this.abortBuild.printStackTrace(listener.getLogger());
-            this.abortBuild = null;
-            this.dockerSwarmSlave = null;
+        AbstractProject<?, ?> project = build.getProject();
+
+        if (DockerSwarmSlaveAbortHelper.shouldAbortBuild(project)) {
+            //noinspection ThrowableResultOfMethodCallIgnored
+            DockerSwarmSlaveAbortHelper.getAbortBuildCause(project).printStackTrace(listener.getLogger());
             return null;
         }
 
         return new Environment() {
             @Override
             public boolean tearDown(AbstractBuild build, BuildListener listener) throws IOException, InterruptedException {
-                dockerSwarmSlave.stop();
                 return true;
             }
         };
@@ -86,22 +83,6 @@ public class DockerSwarmSlaveBuildWrapper extends BuildWrapper {
 
     public String getDockerRegistryCredentials() {
         return dockerRegistryCredentials;
-    }
-
-    public DockerSwarmSlave getDockerSwarmSlave() {
-        return dockerSwarmSlave;
-    }
-
-    public void setDockerSwarmSlave(DockerSwarmSlave dockerSwarmSlave) {
-        this.dockerSwarmSlave = dockerSwarmSlave;
-    }
-
-    public boolean isAborted() {
-        return abortBuild != null;
-    }
-
-    public void abortBuild(Exception e) {
-        this.abortBuild = e;
     }
 
     @Extension
