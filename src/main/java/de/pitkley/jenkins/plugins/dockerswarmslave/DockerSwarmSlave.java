@@ -41,8 +41,9 @@ public class DockerSwarmSlave implements Closeable {
 
     private transient final Logger logger = Logger.getLogger(getClass().getName());
     private transient final TaskListener listener = new LogTaskListener(logger, Level.ALL);
-    private transient final Computer master = Computer.currentComputer();
-    private transient final Launcher launcher = master.getNode().createLauncher(listener);
+    private transient final Jenkins jenkins = Jenkins.getInstance();
+    private transient final Computer jenkinsComputer = jenkins.createComputer();
+    private transient final Launcher launcher = jenkins.createLauncher(listener);
 
     private final DockerSwarmSlaveBuildWrapper buildWrapper;
     private final AbstractProject<?, ?> project;
@@ -63,7 +64,7 @@ public class DockerSwarmSlave implements Closeable {
         this.buildNumber = buildNumber;
 
         this.registryEndpoint = new DockerRegistryEndpoint(null, buildWrapper.getDockerRegistryCredentials());
-        this.dockerExecutable = DockerTool.getExecutable(buildWrapper.getDockerInstallation(), master.getNode(), null, master.getEnvironment());
+        this.dockerExecutable = DockerTool.getExecutable(buildWrapper.getDockerInstallation(), jenkins, null, jenkinsComputer.getEnvironment());
 
         setupCredentials();
     }
@@ -266,7 +267,7 @@ public class DockerSwarmSlave implements Closeable {
 
     private EnvVars getEnvVars() throws IOException, InterruptedException {
         if (envVars == null) {
-            envVars = new EnvVars(master.getEnvironment()).overrideAll(dockerEnv.env());
+            envVars = new EnvVars(jenkinsComputer.getEnvironment()).overrideAll(dockerEnv.env());
         }
 
         return envVars;
