@@ -46,7 +46,7 @@ public class DockerSwarmSlaveLabelAssignment implements LabelAssignmentAction {
             // Since `getAssignedLabel(SubTask)` is called repeatedly if there is no build-processor with the given
             // label available, we have to timeout at some point if the started docker-container doesn't come up.
             if (dockerSwarmSlave.shouldTimeout()) {
-                throw new RuntimeException("Docker container didn't respond in time, aborting.");
+                throw new RuntimeException("Docker container (or Docker itself) didn't respond in time, aborting.");
             }
 
             String slaveLabel = dockerSwarmSlave.getSlaveLabel();

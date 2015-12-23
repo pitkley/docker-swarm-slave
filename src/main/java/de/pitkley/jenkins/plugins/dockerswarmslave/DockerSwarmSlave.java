@@ -1,5 +1,9 @@
 package de.pitkley.jenkins.plugins.dockerswarmslave;
 
+import com.cloudbees.plugins.credentials.CredentialsMatchers;
+import com.cloudbees.plugins.credentials.CredentialsProvider;
+import com.cloudbees.plugins.credentials.common.StandardUsernamePasswordCredentials;
+import com.cloudbees.plugins.credentials.domains.DomainRequirement;
 import hudson.EnvVars;
 import hudson.Launcher;
 import hudson.model.AbstractProject;
@@ -20,10 +24,7 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.logging.Level;
@@ -96,79 +97,100 @@ public class DockerSwarmSlave implements Closeable {
     }
 
     protected void createSlave() throws IOException, InterruptedException, URISyntaxException {
-        /*
-        TODO run the following steps in their own thread (including setting `timeWaitForSlave`)
-        It's important that errors happening and getting caught in the `run`-block get reported to
-        DockerSwarmSlaveAbortHelper that a concurrent error is actually considered (which it should
-        already be, since DockerSwarmSlaveLabelAssignment checks).
-
-        Also important: We need to timeout this thread somehow too, since we don't want to block the
-        build potentially indefinitely.
-
         executorService.submit(new Runnable() {
             @Override
             public void run() {
+                try {
+                    EnvVars envVars = getEnvVars();
+                    ArgumentListBuilder args;
+                    int status;
 
-                this.timeWaitForSlave = System.currentTimeMillis();
+                    String slaveLabel = getSlaveLabel();
+
+                    // Check if a container with the same label is left-over from a cancelled build or similar
+                    // (generally this should not be needed)
+                    args = dockerCommand()
+                            .add("inspect")
+                            .add(slaveLabel);
+
+                    status = launcher.launch()
+                            .envs(envVars)
+                            .cmds(args)
+                            .join();
+
+                    if (status == 0) {
+                        // Try to remove the stray container
+                        args = dockerCommand()
+                                .add("rm", "-f")
+                                .add(slaveLabel);
+
+                        launcher.launch()
+                                .envs(envVars)
+                                .cmds(args)
+                                .join();
+                    }
+
+                    // Get the master IP (routed from the docker container) and get the master URI from it
+                    String masterIp = getMasterIp();
+                    String masterUri = getMasterUri(masterIp);
+
+                    // Run container
+                    args = dockerCommand()
+                            .add("run", "-d")
+                            .add("--name", slaveLabel)
+                            /* TODO check if we need a --link here, if jenkins runs in a docker-container */
+                            .add(buildWrapper.getDockerImage())
+                            .add("-master", masterUri)
+                            .add("-labels").addQuoted(slaveLabel);
+
+                    // Add specified swarm credentials if applicable
+                    String swarmCredentialsId = buildWrapper.getSwarmCredentials();
+                    if (swarmCredentialsId != null) {
+                        // From what I've seen, we can't use `CredentialsProvider#findCredentialsById` directly, since
+                        // we don't have a `Run`-context yet.
+                        StandardUsernamePasswordCredentials credentials = CredentialsMatchers.firstOrNull(
+                                CredentialsProvider.lookupCredentials(
+                                        StandardUsernamePasswordCredentials.class,
+                                        project,
+                                        null,
+                                        Collections.<DomainRequirement>emptyList()
+                                ),
+                                CredentialsMatchers.withId(swarmCredentialsId)
+                        );
+
+                        if (credentials == null) {
+                            // This shouldn't happen since the user specified the credentials using a list in the job
+                            // configuration. One way it could happen though is that the job was e.g. imported.
+                            throw new RuntimeException("Swarm credentials ID seems to be ambiguous");
+                        }
+
+                        // Do NOT use `addQuoted` in the following statements.
+                        // I'm not sure if either `Launcher` will automatically supply quotes or if it is an issue with
+                        // the `swarm-client.jar`, but at least up until version 2.0 the swarm-client would include the
+                        // quotes and fail to authenticate.
+                        args
+                                .add("-username").add(credentials.getUsername())
+                                .add("-password").addMasked(credentials.getPassword());
+                    }
+
+                    status = launcher.launch()
+                            .envs(envVars)
+                            .cmds(args)
+                            .stderr(listener.getLogger())
+                            .join();
+
+                    if (status != 0) {
+                        throw new RuntimeException("Launching the docker-swarm-slave failed, aborting.");
+                    }
+
+                    // Set the start time for a potential timeout
+                    setTimeWaitForSlave(System.currentTimeMillis());
+                } catch (Exception e) {
+                    DockerSwarmSlaveAbortHelper.abortBuild(project, e);
+                }
             }
         });
         this.timeWaitForStart = System.currentTimeMillis();
-        */
-        EnvVars envVars = getEnvVars();
-        ArgumentListBuilder args;
-        int status;
-
-        String slaveLabel = getSlaveLabel();
-
-        // Check if a container with the same label is left-over from a cancelled build or similar
-        // (generally this should not be needed)
-        args = dockerCommand()
-                .add("inspect")
-                .add(slaveLabel);
-
-        status = launcher.launch()
-                .envs(envVars)
-                .cmds(args)
-                .join();
-
-        if (status == 0) {
-            // Try to remove the stray container
-            args = dockerCommand()
-                    .add("rm", "-f")
-                    .add(slaveLabel);
-
-            launcher.launch()
-                    .envs(envVars)
-                    .cmds(args)
-                    .join();
-        }
-
-        // Get the master IP (routed from the docker container) and get the master URI from it
-        String masterIp = getMasterIp();
-        String masterUri = getMasterUri(masterIp);
-
-        // Run container
-        args = dockerCommand()
-                .add("run", "-d")
-                .add("--name", slaveLabel)
-                /* TODO check if we need a --link here, if jenkins runs in a docker-container */
-                .add(buildWrapper.getDockerImage())
-                .add("-master", masterUri)
-                .add("-labels").addQuoted(slaveLabel);
-        /* TODO add swarmCredentials if applicable */
-
-        status = launcher.launch()
-                .envs(envVars)
-                .cmds(args)
-                .stderr(listener.getLogger())
-                .join();
-
-        if (status != 0) {
-            throw new RuntimeException("Launching the docker-swarm-slave failed, aborting.");
-        }
-
-        // Set the start time for a potential timeout
-        this.timeWaitForSlave = System.currentTimeMillis();
     }
 
     protected void stopSlave() throws IOException, InterruptedException {
@@ -225,6 +247,10 @@ public class DockerSwarmSlave implements Closeable {
             // If destroying it causes an exception, we can generally ignore it, but we'll output it anyway
             e.printStackTrace(listener.error("Failed to desstroy the docker-container"));
         }
+    }
+
+    private void setTimeWaitForSlave(long timeWaitForSlave) {
+        this.timeWaitForSlave = timeWaitForSlave;
     }
 
     protected boolean shouldTimeout() {
