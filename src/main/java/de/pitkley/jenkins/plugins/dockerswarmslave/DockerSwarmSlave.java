@@ -33,6 +33,7 @@ import java.util.regex.Pattern;
 
 public class DockerSwarmSlave implements Closeable {
 
+    private static final int START_TIMEOUT = 10;
     private static final int SLAVE_TIMEOUT = 10; // TODO maybe move to system configuration?
     private transient static final ExecutorService executorService = Executors.newCachedThreadPool(new ExceptionCatchingThreadFactory(new NamingThreadFactory(Executors.defaultThreadFactory(), "DockerSwarmSlave.executor")));
     private transient static final Map<AbstractProject<?, ?>, DockerSwarmSlave> DOCKER_SWARM_SLAVE_MAP = new HashMap<AbstractProject<?, ?>, DockerSwarmSlave>();
@@ -45,7 +46,9 @@ public class DockerSwarmSlave implements Closeable {
     private final DockerSwarmSlaveBuildWrapper buildWrapper;
     private final AbstractProject<?, ?> project;
     private final int buildNumber;
-    private long timeStarted = -1L;
+
+    private long timeWaitForStart = -1L;
+    private long timeWaitForSlave = -1L;
 
     private final DockerRegistryEndpoint registryEndpoint;
     private final String dockerExecutable;
@@ -94,7 +97,7 @@ public class DockerSwarmSlave implements Closeable {
 
     protected void createSlave() throws IOException, InterruptedException, URISyntaxException {
         /*
-        TODO run the following steps in their own thread (including setting `timeStarted`)
+        TODO run the following steps in their own thread (including setting `timeWaitForSlave`)
         It's important that errors happening and getting caught in the `run`-block get reported to
         DockerSwarmSlaveAbortHelper that a concurrent error is actually considered (which it should
         already be, since DockerSwarmSlaveLabelAssignment checks).
@@ -106,8 +109,10 @@ public class DockerSwarmSlave implements Closeable {
             @Override
             public void run() {
 
+                this.timeWaitForSlave = System.currentTimeMillis();
             }
         });
+        this.timeWaitForStart = System.currentTimeMillis();
         */
         EnvVars envVars = getEnvVars();
         ArgumentListBuilder args;
@@ -163,7 +168,7 @@ public class DockerSwarmSlave implements Closeable {
         }
 
         // Set the start time for a potential timeout
-        this.timeStarted = System.currentTimeMillis();
+        this.timeWaitForSlave = System.currentTimeMillis();
     }
 
     protected void stopSlave() throws IOException, InterruptedException {
@@ -223,7 +228,14 @@ public class DockerSwarmSlave implements Closeable {
     }
 
     protected boolean shouldTimeout() {
-        return (!(this.timeStarted == -1) || (System.currentTimeMillis() - this.timeStarted) / 1000 > SLAVE_TIMEOUT);
+        if (this.timeWaitForSlave != -1) {
+            return (System.currentTimeMillis() - this.timeWaitForSlave) / 1000 > SLAVE_TIMEOUT;
+        }
+        //noinspection SimplifiableIfStatement (for clarity)
+        if (this.timeWaitForStart != -1) {
+            return (System.currentTimeMillis() - this.timeWaitForStart) / 1000 > START_TIMEOUT;
+        }
+        return false;
     }
 
     private EnvVars getEnvVars() throws IOException, InterruptedException {
