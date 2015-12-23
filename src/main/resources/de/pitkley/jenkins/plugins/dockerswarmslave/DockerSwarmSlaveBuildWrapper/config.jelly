@@ -9,6 +9,9 @@
             <f:entry field="swarmCredentials" title="Swarm credentials">
                 <c:select/>
             </f:entry>
+            <f:entry field="autodetect" title="Autodetect Jenkins URL">
+                <f:checkbox/>
+            </f:entry>
             <f:entry field="jenkinsUri" title="Jenkins URL">
                 <f:textbox/>
             </f:entry>

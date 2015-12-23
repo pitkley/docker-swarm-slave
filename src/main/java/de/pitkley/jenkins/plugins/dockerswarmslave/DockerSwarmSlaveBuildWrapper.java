@@ -29,15 +29,17 @@ public class DockerSwarmSlaveBuildWrapper extends BuildWrapper {
     private final String dockerImage;
     private final String swarmCredentials;
     private final String jenkinsUri;
+    private final boolean autodetect;
     private final DockerServerEndpoint dockerHost;
     private final String dockerInstallation;
     private final String dockerNetwork;
     private final String dockerRegistryCredentials;
 
     @DataBoundConstructor
-    public DockerSwarmSlaveBuildWrapper(String dockerImage, String swarmCredentials, String jenkinsUri, DockerServerEndpoint dockerHost, String dockerInstallation, String dockerNetwork, String dockerRegistryCredentials) {
+    public DockerSwarmSlaveBuildWrapper(String dockerImage, String swarmCredentials, boolean autodetect, String jenkinsUri, DockerServerEndpoint dockerHost, String dockerInstallation, String dockerNetwork, String dockerRegistryCredentials) {
         this.dockerImage = dockerImage;
         this.swarmCredentials = swarmCredentials;
+        this.autodetect = autodetect;
         this.jenkinsUri = jenkinsUri;
         this.dockerHost = dockerHost;
         this.dockerInstallation = dockerInstallation;
@@ -73,6 +75,10 @@ public class DockerSwarmSlaveBuildWrapper extends BuildWrapper {
 
     public String getJenkinsUri() {
         return jenkinsUri;
+    }
+
+    public boolean shouldAutodetect() {
+        return autodetect;
     }
 
     public DockerServerEndpoint getDockerHost() {
