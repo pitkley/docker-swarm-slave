@@ -366,18 +366,23 @@ public class DockerSwarmSlave implements Closeable {
             // (The hosts file in a docker-container contains it's own IP mapped to it's hostname)
             out = new ByteArrayOutputStream();
             status = launcher.launch()
-                    .cmds("grep", "-m 1", hostname, "/etc/hosts")
+                    .cmds("grep", "-m", "1", hostname, "/etc/hosts")
                     .stdout(out).join();
 
             if (status != 0) {
                 throw new RuntimeException("Couldn't get hosts-file, aborting.");
             }
 
-            String hostIp = out.toString("UTF-8").trim();
-            if (hostIp.length() > 0) {
+            String hostLine = out.toString("UTF-8").trim();
+            if (hostLine.length() == 0) {
                 throw new RuntimeException("Couldn't get hosts-file entry, aborting.");
             }
-            return hostIp;
+
+            String[] split = hostLine.split("\\s");
+            if (split.length < 1) {
+                throw new RuntimeException("Couldn't split hosts-file entry, aborting.");
+            }
+            return split[0];
         }
     }
 
