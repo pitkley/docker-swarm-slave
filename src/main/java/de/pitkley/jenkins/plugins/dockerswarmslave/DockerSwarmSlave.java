@@ -19,18 +19,14 @@ import org.jenkinsci.plugins.docker.commons.credentials.KeyMaterial;
 import org.jenkinsci.plugins.docker.commons.tools.DockerTool;
 
 import javax.annotation.Nullable;
-import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.IOException;
-import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class DockerSwarmSlave implements Closeable {
 
@@ -131,15 +127,13 @@ public class DockerSwarmSlave implements Closeable {
                                 .join();
                     }
 
-                    // Get the master IP (routed from the docker container) and get the master URI from it
-                    String masterIp = getMasterIp();
-                    String masterUri = getMasterUri(masterIp);
+                    // Get the master URI for Jenkins
+                    String masterUri = getMasterUri();
 
                     // Run container
                     args = dockerCommand()
                             .add("run", "-d")
                             .add("--name", slaveLabel)
-                            /* TODO check if we need a --link here, if jenkins runs in a docker-container */
                             .add(buildWrapper.getDockerImage())
                             .add("-master", masterUri)
                             .add("-labels").addQuoted(slaveLabel);
@@ -297,93 +291,18 @@ public class DockerSwarmSlave implements Closeable {
         return args;
     }
 
-    protected String getMasterUri(String ip) throws URISyntaxException {
+    protected String getMasterUri() throws URISyntaxException {
+        String jenkinsUri = buildWrapper.getJenkinsUri();
+        if (jenkinsUri != null && !jenkinsUri.isEmpty()) {
+            return jenkinsUri;
+        }
+
         String rootUri = Jenkins.getInstance().getRootUrl();
         if (rootUri == null) {
-            throw new RuntimeException("Unable to get the Jenkins URL, it needs to be set in the global configuration.");
+            throw new RuntimeException("Unable to get the Jenkins URL, it needs to be set in the job or in the global configuration.");
         }
 
-        URI jenkinsUri = new URI(rootUri);
-        // Keep everything from the Jenkins URI but the host, replace it with the master IP
-        URI masterUri = new URI(jenkinsUri.getScheme(),
-                jenkinsUri.getRawUserInfo(),
-                ip,
-                jenkinsUri.getPort(),
-                jenkinsUri.getRawPath(),
-                jenkinsUri.getRawQuery(),
-                jenkinsUri.getRawFragment());
-
-        return masterUri.toString();
-    }
-
-    protected String getMasterIp() throws IOException, InterruptedException {
-        // Check if we are in a docker container
-        int status = launcher.launch()
-                .cmds("cat", "/.dockerinit")
-                .join();
-
-        if (status == 1) {
-            // .dockerinit doesn't exist, we are most probably not in a docker-container.
-            // One could determine it further using '/proc/self/cgroups'.
-
-            // Get docker bridge gateway
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            ArgumentListBuilder args = dockerCommand()
-                    .add("network", "inspect", buildWrapper.getDockerNetwork());
-
-            status = launcher.launch()
-                    .cmds(args)
-                    .stdout(out).join();
-
-            if (status != 0) {
-                throw new RuntimeException("Docker network '" + buildWrapper.getDockerNetwork() + "' not found, aborting.");
-            }
-
-            String inspect = out.toString("UTF-8").trim();
-
-            // Find a substring like `"Gateway": "172.17.0.1"` and extract the IP
-            Matcher m = Pattern.compile(".Gateway.:\\s*.(([0-9]{0,3}\\.?){4}).").matcher(inspect);
-            if (!m.find()) {
-                throw new RuntimeException("Couldn't determine master IP, aborting.");
-            }
-            return m.group(1);
-        } else {
-            // .dockerinit exists, we are probably in a docker-container
-
-            // Get hostname
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            status = launcher.launch()
-                    .cmds("hostname")
-                    .stdout(out).join();
-
-            if (status != 0) {
-                throw new RuntimeException("Can't get hostname, aborting.");
-            }
-
-            String hostname = out.toString("UTF-8").trim();
-
-            // Get hosts file
-            // (The hosts file in a docker-container contains it's own IP mapped to it's hostname)
-            out = new ByteArrayOutputStream();
-            status = launcher.launch()
-                    .cmds("grep", "-m", "1", hostname, "/etc/hosts")
-                    .stdout(out).join();
-
-            if (status != 0) {
-                throw new RuntimeException("Couldn't get hosts-file, aborting.");
-            }
-
-            String hostLine = out.toString("UTF-8").trim();
-            if (hostLine.length() == 0) {
-                throw new RuntimeException("Couldn't get hosts-file entry, aborting.");
-            }
-
-            String[] split = hostLine.split("\\s");
-            if (split.length < 1) {
-                throw new RuntimeException("Couldn't split hosts-file entry, aborting.");
-            }
-            return split[0];
-        }
+        return rootUri;
     }
 
     protected void cleanup() {
