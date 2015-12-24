@@ -144,7 +144,7 @@ public class DockerSwarmSlave implements Closeable {
 
                     // Add specified swarm credentials if applicable
                     String swarmCredentialsId = buildWrapper.getSwarmCredentials();
-                    if (swarmCredentialsId != null) {
+                    if (swarmCredentialsId != null && !swarmCredentialsId.isEmpty()) {
                         // From what I've seen, we can't use `CredentialsProvider#findCredentialsById` directly, since
                         // we don't have a `Run`-context yet.
                         StandardUsernamePasswordCredentials credentials = CredentialsMatchers.firstOrNull(
