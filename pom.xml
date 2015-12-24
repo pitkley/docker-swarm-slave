@@ -12,11 +12,11 @@
   </parent>
   <groupId>de.pitkley.jenkins.plugins</groupId>
   <artifactId>docker-swarm-slave</artifactId>
-  <version>1.0-SNAPSHOT</version>
+  <version>0.1.0-SNAPSHOT</version>
   <packaging>hpi</packaging>
 
   <name>Docker Swarm Slave</name>
-  <description>TODO</description>
+  <description>Docker-swarm-slave build-wrapper</description>
   <!--<url>https://wiki.jenkins-ci.org/display/JENKINS/TODO+Plugin</url>-->
   <licenses>
     <license>
