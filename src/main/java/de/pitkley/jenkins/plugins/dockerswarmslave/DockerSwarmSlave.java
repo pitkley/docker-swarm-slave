@@ -22,8 +22,7 @@ import javax.annotation.Nullable;
 import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.IOException;
-import java.net.URI;
-import java.net.URISyntaxException;
+import java.net.*;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -360,12 +359,34 @@ public class DockerSwarmSlave implements Closeable {
 
             String inspect = out.toString("UTF-8").trim();
 
-            // Find a substring like `"Gateway": "172.17.0.1"` and extract the IP
-            Matcher m = Pattern.compile(".Gateway.:\\s*.(([0-9]{0,3}\\.?){4}).").matcher(inspect);
+            // Find a substring like `"com.docker.network.bridge.name": "docker0"`
+            Matcher m = Pattern.compile(".com\\.docker\\.network\\.bridge\\.name.:\\s*.(\\w+).").matcher(inspect);
             if (!m.find()) {
-                throw new RuntimeException("Couldn't determine master IP, aborting.");
+                throw new RuntimeException("Couldn't determine network-interface name for '" + buildWrapper.getDockerNetwork() + "', aborting.");
             }
-            return m.group(1);
+            String networkInterfaceName = m.group(1);
+
+            // Get determined network interface
+            NetworkInterface networkInterface = NetworkInterface.getByName(networkInterfaceName);
+            if (networkInterface == null) {
+                throw new RuntimeException("Couldn't get network-interface to determine IP, aborting.");
+            }
+
+            // Try to find the IP address
+            InetAddress inetAddress = null;
+            for (InterfaceAddress i : networkInterface.getInterfaceAddresses()) {
+                InetAddress i2 = i.getAddress();
+                if (i2 != null && i2 instanceof Inet4Address) {
+                    inetAddress = i2;
+                    break;
+                }
+            }
+
+            if (inetAddress == null) {
+                throw new RuntimeException("Couldn't determine IP address from network-interface, aborting.");
+            }
+
+            return inetAddress.getHostAddress();
         } else {
             // .dockerinit exists, we are probably in a docker-container
 
