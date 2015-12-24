@@ -1,8 +1,9 @@
 package de.pitkley.jenkins.plugins.dockerswarmslave;
 
 import hudson.Extension;
-import hudson.model.Build;
-import hudson.model.Project;
+import hudson.model.AbstractBuild;
+import hudson.model.AbstractProject;
+import hudson.model.BuildableItemWithBuildWrappers;
 import hudson.model.Run;
 import hudson.model.listeners.RunListener;
 
@@ -11,19 +12,23 @@ public class DockerSwarmSlaveRunListener extends RunListener<Run<?, ?>> {
     @Override
     public void onFinalized(Run<?, ?> run) {
         // Check that we have a build
-        if (!Build.class.isAssignableFrom(run.getClass())) {
+        if (!AbstractBuild.class.isAssignableFrom(run.getClass())) {
             return;
         }
-        Build<?, ?> b = (Build) run;
+        AbstractBuild<?, ?> b = (AbstractBuild) run;
 
         // Check that it is a project
-        if (!Project.class.isAssignableFrom(b.getProject().getClass())) {
+        if (!AbstractProject.class.isAssignableFrom(b.getProject().getClass())) {
             return;
         }
-        Project<?, ?> project = b.getProject();
+        AbstractProject<?, ?> project = b.getProject();
+
+        if (!BuildableItemWithBuildWrappers.class.isAssignableFrom(project.getClass())) {
+            return;
+        }
 
         // Was our build-wrapper active?
-        DockerSwarmSlaveBuildWrapper buildWrapper = DockerSwarmSlaveLabelAssignment.getDockerSwarmSlaveBuildWrapper(project);
+        DockerSwarmSlaveBuildWrapper buildWrapper = DockerSwarmSlaveLabelAssignment.getDockerSwarmSlaveBuildWrapper((BuildableItemWithBuildWrappers) project);
         if (buildWrapper == null) {
             return;
         }
