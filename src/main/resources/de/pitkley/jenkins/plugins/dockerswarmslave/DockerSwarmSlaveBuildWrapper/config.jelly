@@ -5,7 +5,6 @@
             <f:textbox/>
         </f:entry>
         <f:advanced>
-            <!-- TODO maybe add an option to specify the Jenkins URI in case it differs for the containers -->
             <f:entry field="swarmCredentials" title="Swarm credentials">
                 <c:select/>
             </f:entry>
